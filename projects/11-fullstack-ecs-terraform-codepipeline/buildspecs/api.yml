@@ -1,0 +1,39 @@
+version: 0.2
+
+# Builds the API image, tags it with the commit SHA, pushes it, and emits the
+# imagedefinitions.json that the ECS deploy action consumes.
+
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to ECR"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$REPOSITORY_URI"
+      # CODEBUILD_RESOLVED_SOURCE_VERSION is the real commit SHA even when the
+      # source came through a CodePipeline zip artifact (no .git directory).
+      - IMAGE_TAG="sha-${CODEBUILD_RESOLVED_SOURCE_VERSION:-$(date +%Y%m%d%H%M%S)}"
+      - IMAGE_TAG="${IMAGE_TAG:0:40}"
+      - echo "Image tag $IMAGE_TAG"
+
+  build:
+    commands:
+      - cd projects/11-fullstack-ecs-terraform-codepipeline/app/api
+      - npm ci --omit=dev --ignore-scripts || npm install --omit=dev
+      - npm run lint --if-present
+      - npm test --if-present
+      - docker build --build-arg NODE_ENV=production -t "$REPOSITORY_URI:$IMAGE_TAG" .
+
+  post_build:
+    commands:
+      # Immutable tags mean a rebuild of the same commit fails; that is intended.
+      - docker push "$REPOSITORY_URI:$IMAGE_TAG"
+      - cd "$CODEBUILD_SRC_DIR"
+      - printf '[{"name":"%s","imageUri":"%s"}]' "$CONTAINER_NAME" "$REPOSITORY_URI:$IMAGE_TAG" > imagedefinitions.json
+      - cat imagedefinitions.json
+
+artifacts:
+  files:
+    - imagedefinitions.json
+
+cache:
+  paths:
+    - '/root/.npm/**/*'

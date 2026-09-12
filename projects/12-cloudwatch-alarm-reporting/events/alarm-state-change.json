@@ -1,0 +1,26 @@
+{
+  "version": "0",
+  "id": "c4c1c1c9-6542-e61b-6ef0-8c4d36933a92",
+  "detail-type": "CloudWatch Alarm State Change",
+  "source": "aws.cloudwatch",
+  "account": "123456789012",
+  "time": "2026-09-10T22:43:48Z",
+  "region": "ap-south-1",
+  "resources": ["arn:aws:cloudwatch:ap-south-1:123456789012:alarm:checkout-latency-p99"],
+  "detail": {
+    "alarmName": "checkout-latency-p99",
+    "state": {
+      "value": "ALARM",
+      "reason": "Threshold Crossed: 3 datapoints were greater than the threshold (800.0).",
+      "timestamp": "2026-09-10T22:43:48.123+0000"
+    },
+    "previousState": {
+      "value": "OK",
+      "reason": "Threshold Crossed: 3 datapoints were not greater than the threshold (800.0).",
+      "timestamp": "2026-09-10T22:13:48.001+0000"
+    },
+    "configuration": {
+      "description": "p99 latency on the checkout API"
+    }
+  }
+}

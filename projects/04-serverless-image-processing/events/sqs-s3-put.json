@@ -1,0 +1,16 @@
+{
+  "Records": [
+    {
+      "messageId": "11111111-2222-3333-4444-555555555555",
+      "receiptHandle": "AQEB...",
+      "body": "{\"Records\":[{\"eventVersion\":\"2.1\",\"eventSource\":\"aws:s3\",\"awsRegion\":\"ap-south-1\",\"eventName\":\"ObjectCreated:Put\",\"s3\":{\"bucket\":{\"name\":\"image-processing-dev-uploads-123456789012\"},\"object\":{\"key\":\"incoming/sample-photo.jpg\",\"size\":248193}}}]}",
+      "attributes": {
+        "ApproximateReceiveCount": "1",
+        "SentTimestamp": "1700000000000"
+      },
+      "messageAttributes": {},
+      "eventSource": "aws:sqs",
+      "awsRegion": "ap-south-1"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flask on Elastic Beanstalk</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font: 16px/1.6 system-ui, -apple-system, sans-serif; display: grid; place-items: center; min-height: 100vh; }
+  main { max-width: 36rem; padding: 2rem; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
+  dt { font-weight: 600; }
+  dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Flask is running on Elastic Beanstalk</h1>
+  <dl>
+    <dt>Environment</dt><dd>{{ environment }}</dd>
+    <dt>Release</dt><dd>{{ release }}</dd>
+    <dt>Instance</dt><dd>{{ hostname }}</dd>
+    <dt>Python</dt><dd>{{ python_version }}</dd>
+    <dt>Server time</dt><dd>{{ now }}</dd>
+  </dl>
+  <p><a href="/api/info">/api/info</a> · <a href="/health">/health</a></p>
+</main>
+</body>
+</html>

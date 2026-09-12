@@ -1,0 +1,10 @@
+{
+  "app": "python3 app.py",
+  "context": {
+    "project": "recommender",
+    "environment": "dev",
+    "enable_endpoint": false,
+    "endpoint_instance_type": "ml.m5.large",
+    "@aws-cdk/aws-iam:minimizePolicies": true
+  }
+}

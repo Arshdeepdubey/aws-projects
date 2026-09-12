@@ -1,0 +1,252 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless image processing — S3 -> SQS -> Lambda -> S3 + DynamoDB
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: image-processing
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, stage, prod]
+  MaxImageBytes:
+    Type: Number
+    Default: 26214400
+    Description: Reject uploads larger than this (25 MiB default).
+  PresignExpirySeconds:
+    Type: Number
+    Default: 900
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures: [arm64]
+    Timeout: 60
+    MemorySize: 1024
+    Tracing: Active
+    Environment:
+      Variables:
+        POWERTOOLS_SERVICE_NAME: !Ref ProjectName
+        LOG_LEVEL: INFO
+    Tags:
+      Project: !Ref ProjectName
+      Environment: !Ref Environment
+      ManagedBy: sam
+
+Resources:
+  # ------------------------------------------------------------------ storage
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    DependsOn: ProcessingQueuePolicy
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-uploads-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: abort-incomplete-uploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: 's3:ObjectCreated:*'
+            Queue: !GetAtt ProcessingQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: incoming/
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [PUT, POST, GET, HEAD]
+            AllowedOrigins: ['*']
+            AllowedHeaders: ['*']
+            MaxAge: 3000
+
+  DerivedBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-derived-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # ------------------------------------------------------------------ queueing
+  ProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-${Environment}-processing'
+      VisibilityTimeout: 360          # >= 6x function timeout
+      MessageRetentionPeriod: 345600  # 4 days
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ProcessingDLQ.Arn
+        maxReceiveCount: 3
+
+  ProcessingDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-${Environment}-processing-dlq'
+      MessageRetentionPeriod: 1209600 # 14 days
+
+  # S3 can only publish to the queue once this policy exists — hence the DependsOn above.
+  ProcessingQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref ProcessingQueue]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowS3SendMessage
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: 'sqs:SendMessage'
+            Resource: !GetAtt ProcessingQueue.Arn
+            Condition:
+              ArnLike:
+                'aws:SourceArn': !Sub 'arn:${AWS::Partition}:s3:::${ProjectName}-${Environment}-uploads-${AWS::AccountId}'
+              StringEquals:
+                'aws:SourceAccount': !Ref AWS::AccountId
+
+  # ------------------------------------------------------------------ metadata
+  ImagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-images'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: imageId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: imageId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: status-createdAt-index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  # ------------------------------------------------------------------ functions
+  ProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-processor'
+      CodeUri: src/processor/
+      Handler: app.lambda_handler
+      MemorySize: 2048
+      Timeout: 60
+      Environment:
+        Variables:
+          DERIVED_BUCKET: !Ref DerivedBucket
+          IMAGES_TABLE: !Ref ImagesTable
+          MAX_IMAGE_BYTES: !Ref MaxImageBytes
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Sub '${ProjectName}-${Environment}-uploads-${AWS::AccountId}'
+        - S3CrudPolicy:
+            BucketName: !Sub '${ProjectName}-${Environment}-derived-${AWS::AccountId}'
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImagesTable
+      Events:
+        FromQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ProcessingQueue.Arn
+            BatchSize: 5
+            MaximumBatchingWindowInSeconds: 5
+            FunctionResponseTypes: [ReportBatchItemFailures]
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-api'
+      CodeUri: src/api/
+      Handler: app.lambda_handler
+      MemorySize: 512
+      Timeout: 15
+      Environment:
+        Variables:
+          UPLOADS_BUCKET: !Ref UploadsBucket
+          DERIVED_BUCKET: !Ref DerivedBucket
+          IMAGES_TABLE: !Ref ImagesTable
+          PRESIGN_EXPIRY_SECONDS: !Ref PresignExpirySeconds
+          MAX_IMAGE_BYTES: !Ref MaxImageBytes
+      Policies:
+        - S3WritePolicy:
+            BucketName: !Sub '${ProjectName}-${Environment}-uploads-${AWS::AccountId}'
+        - S3ReadPolicy:
+            BucketName: !Sub '${ProjectName}-${Environment}-derived-${AWS::AccountId}'
+        - DynamoDBReadPolicy:
+            TableName: !Ref ImagesTable
+      Events:
+        CreateUpload:
+          Type: HttpApi
+          Properties:
+            Path: /uploads
+            Method: POST
+        GetImage:
+          Type: HttpApi
+          Properties:
+            Path: /images/{imageId}
+            Method: GET
+
+  # ------------------------------------------------------------------ alarms
+  DLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-dlq-not-empty'
+      AlarmDescription: Messages landed in the image processing dead-letter queue
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ProcessingDLQ.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  UploadsBucket:
+    Description: Upload images under the incoming/ prefix
+    Value: !Ref UploadsBucket
+  DerivedBucket:
+    Value: !Ref DerivedBucket
+  ImagesTable:
+    Value: !Ref ImagesTable
+  ApiEndpoint:
+    Description: HTTP API base URL
+    Value: !Sub 'https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+  ProcessingQueueUrl:
+    Value: !Ref ProcessingQueue
+  DeadLetterQueueUrl:
+    Value: !Ref ProcessingDLQ

@@ -1,0 +1,41 @@
+project     = "fullstack"
+environment = "dev"
+aws_region  = "ap-south-1"
+vpc_cidr    = "10.20.0.0/16"
+
+# Cost controls for dev
+enable_nat_gateway = true
+single_nat_gateway = true
+assign_public_ip   = false
+
+api = {
+  cpu           = 256
+  memory        = 512
+  desired_count = 2
+  min_count     = 2
+  max_count     = 10
+  port          = 3000
+  health_path   = "/api/health"
+}
+
+web = {
+  cpu           = 256
+  memory        = 512
+  desired_count = 2
+  min_count     = 1
+  max_count     = 6
+  port          = 80
+  health_path   = "/health"
+}
+
+# Pipeline — create the connection in the console first, then paste the ARN.
+enable_pipeline         = true
+github_repository       = "your-org/aws-lambda-functions"
+github_branch           = "main"
+codestar_connection_arn = "arn:aws:codestar-connections:ap-south-1:123456789012:connection/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# HTTPS (optional)
+# domain_name    = "app.example.com"
+# hosted_zone_id = "Z0123456789ABCDEFGHIJ"
+
+# alarm_email = "you@example.com"

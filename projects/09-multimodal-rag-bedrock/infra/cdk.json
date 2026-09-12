@@ -1,0 +1,14 @@
+{
+  "app": "python3 app.py",
+  "context": {
+    "project": "multimodal-rag",
+    "environment": "dev",
+    "bedrock_region": "us-east-1",
+    "index_name": "multimodal-rag",
+    "text_embedding_model": "amazon.titan-embed-text-v2:0",
+    "multimodal_embedding_model": "amazon.titan-embed-image-v1",
+    "generation_model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "vision_model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "@aws-cdk/aws-iam:minimizePolicies": true
+  }
+}

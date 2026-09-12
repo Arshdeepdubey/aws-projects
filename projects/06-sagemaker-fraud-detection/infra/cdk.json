@@ -1,0 +1,20 @@
+{
+  "app": "python3 app.py",
+  "watch": {
+    "include": ["**"],
+    "exclude": ["README.md", "cdk*.json", "requirements*.txt", "**/__pycache__"]
+  },
+  "context": {
+    "project": "fraud-detection",
+    "environment": "dev",
+    "enable_endpoint": true,
+    "endpoint_mode": "serverless",
+    "endpoint_instance_type": "ml.m5.large",
+    "endpoint_instance_count": 1,
+    "serverless_memory_mb": 2048,
+    "serverless_max_concurrency": 5,
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/aws-iam:minimizePolicies": true
+  }
+}

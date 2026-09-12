@@ -1,0 +1,25 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$REPOSITORY_URI"
+      - IMAGE_TAG="sha-${CODEBUILD_RESOLVED_SOURCE_VERSION:-$(date +%Y%m%d%H%M%S)}"
+      - IMAGE_TAG="${IMAGE_TAG:0:40}"
+
+  build:
+    commands:
+      - cd projects/11-fullstack-ecs-terraform-codepipeline/app/web
+      # The API is same-origin behind the ALB, so the build needs no API URL.
+      - docker build -t "$REPOSITORY_URI:$IMAGE_TAG" .
+
+  post_build:
+    commands:
+      - docker push "$REPOSITORY_URI:$IMAGE_TAG"
+      - cd "$CODEBUILD_SRC_DIR"
+      - printf '[{"name":"%s","imageUri":"%s"}]' "$CONTAINER_NAME" "$REPOSITORY_URI:$IMAGE_TAG" > imagedefinitions.json
+      - cat imagedefinitions.json
+
+artifacts:
+  files:
+    - imagedefinitions.json

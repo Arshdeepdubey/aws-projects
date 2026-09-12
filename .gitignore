@@ -35,3 +35,33 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Node
+node_modules/
+dist/
+build/
+npm-debug.log*
+
+# AWS SAM
+.aws-sam/
+samconfig.toml
+
+# AWS CDK
+cdk.out/
+.cdk.staging/
+
+# Environment / local config
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store

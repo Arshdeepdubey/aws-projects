@@ -1,0 +1,10 @@
+project     = "static-site"
+environment = "dev"
+aws_region  = "ap-south-1"
+
+# Custom domain (optional) — both must be set together.
+# domain_name    = "www.example.com"
+# hosted_zone_id = "Z0123456789ABCDEFGHIJ"
+
+price_class   = "PriceClass_100"
+force_destroy = true

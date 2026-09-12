@@ -1,0 +1,20 @@
+project     = "mssql"
+environment = "dev"
+aws_region  = "ap-south-1"
+vpc_cidr    = "10.40.0.0/16"
+
+engine            = "sqlserver-ex"        # ex | web | se | ee
+engine_version    = "16.00.4165.4.v1"
+instance_class    = "db.t3.small"
+allocated_storage = 20
+multi_az          = false                 # not supported on Express
+
+publicly_accessible = false
+allowed_cidr_blocks = []                  # e.g. ["203.0.113.4/32"] when publicly_accessible
+
+master_username         = "admin"
+backup_retention_period = 7
+deletion_protection     = false
+skip_final_snapshot     = true
+
+# alarm_email = "you@example.com"

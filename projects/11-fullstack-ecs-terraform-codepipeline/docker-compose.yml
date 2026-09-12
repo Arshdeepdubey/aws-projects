@@ -1,0 +1,24 @@
+# Runs both services the way they run in production: nginx serving the built
+# web app, the API beside it, and nothing sharing a process.
+services:
+  api:
+    build: ./app/api
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
+      # No TODOS_TABLE: the store falls back to memory, so no AWS needed.
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: ./app/web
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy

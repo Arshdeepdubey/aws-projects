@@ -1,0 +1,11 @@
+{
+  "app": "python3 app.py",
+  "context": {
+    "project": "agentic-assistant",
+    "environment": "dev",
+    "foundation_model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "idle_session_ttl_seconds": 900,
+    "guardrail_blocked_message": "I can't help with that. I can answer questions about your orders, returns and shipping.",
+    "@aws-cdk/aws-iam:minimizePolicies": true
+  }
+}

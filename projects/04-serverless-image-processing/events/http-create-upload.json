@@ -1,0 +1,11 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /uploads",
+  "rawPath": "/uploads",
+  "headers": { "content-type": "application/json" },
+  "requestContext": {
+    "http": { "method": "POST", "path": "/uploads" }
+  },
+  "body": "{\"filename\":\"holiday photo.jpg\",\"contentType\":\"image/jpeg\"}",
+  "isBase64Encoded": false
+}

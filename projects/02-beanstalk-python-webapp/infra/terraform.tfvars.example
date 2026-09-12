@@ -1,0 +1,14 @@
+project     = "eb-flask"
+environment = "dev"
+aws_region  = "ap-south-1"
+
+# Cheaper while developing — no load balancer:
+# environment_type = "SingleInstance"
+
+instance_type = "t3.micro"
+min_size      = 1
+max_size      = 4
+
+app_environment_variables = {
+  # FEATURE_FLAG_X = "true"
+}

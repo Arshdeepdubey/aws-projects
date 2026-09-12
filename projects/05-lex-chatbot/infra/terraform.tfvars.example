@@ -1,0 +1,14 @@
+project     = "booking-bot"
+environment = "dev"
+aws_region  = "ap-south-1"
+
+locale_id                = "en_US"
+voice_id                 = "Joanna"
+nlu_confidence_threshold = 0.40
+idle_session_ttl_seconds = 600
+auto_build               = true
+
+opening_hours = {
+  start = "09:00"
+  end   = "18:00"
+}

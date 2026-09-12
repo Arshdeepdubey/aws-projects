@@ -1,0 +1,9 @@
+{
+  "app": "python3 app.py",
+  "context": {
+    "project": "image-classifier",
+    "environment": "dev",
+    "confidence_threshold": 0.75,
+    "@aws-cdk/aws-iam:minimizePolicies": true
+  }
+}

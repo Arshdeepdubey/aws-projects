@@ -1,0 +1,24 @@
+project     = "fargate-web"
+environment = "dev"
+aws_region  = "ap-south-1"
+vpc_cidr    = "10.30.0.0/16"
+
+enable_nat_gateway = true
+assign_public_ip   = false
+
+container_port = 8080
+task_cpu       = 256
+task_memory    = 512
+desired_count  = 2
+min_capacity   = 2
+max_capacity   = 10
+
+# ~70% cheaper; tasks can be interrupted with two minutes' notice.
+use_fargate_spot = false
+
+# CodeDeployDefault.ECSAllAtOnce | ECSLinear10PercentEvery1Minutes | ECSCanary10Percent5Minutes
+deployment_config        = "CodeDeployDefault.ECSCanary10Percent5Minutes"
+termination_wait_minutes = 5
+
+log_retention_days = 30
+# alarm_email = "you@example.com"

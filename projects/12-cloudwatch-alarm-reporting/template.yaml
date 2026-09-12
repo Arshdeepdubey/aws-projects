@@ -1,0 +1,195 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Automated CloudWatch alarm reporting — state-change recorder plus scheduled report
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: alarm-reporting
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, stage, prod]
+  SenderEmail:
+    Type: String
+    Description: Verified SES identity used as the From address.
+  RecipientEmails:
+    Type: String
+    Description: Comma-separated recipient list.
+  ScheduleExpression:
+    Type: String
+    Default: cron(30 2 * * ? *)
+    Description: EventBridge schedule in UTC. Default is 08:00 IST daily.
+  WindowHours:
+    Type: Number
+    Default: 24
+  AlarmNamePrefix:
+    Type: String
+    Default: ''
+    Description: Only report on alarms whose name starts with this prefix. Empty means all.
+  HistoryTtlDays:
+    Type: Number
+    Default: 90
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures: [arm64]
+    Timeout: 60
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+        HISTORY_TABLE: !Ref AlarmHistoryTable
+    Tags:
+      Project: !Ref ProjectName
+      Environment: !Ref Environment
+      ManagedBy: sam
+
+Resources:
+  AlarmHistoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-alarm-history'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: alarmName
+          AttributeType: S
+        - AttributeName: changedAt
+          AttributeType: S
+        - AttributeName: reportDay
+          AttributeType: S
+      KeySchema:
+        - AttributeName: alarmName
+          KeyType: HASH
+        - AttributeName: changedAt
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: reportDay-changedAt-index
+          KeySchema:
+            - AttributeName: reportDay
+              KeyType: HASH
+            - AttributeName: changedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  ReportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-reports-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-reports
+            Status: Enabled
+            ExpirationInDays: 365
+
+  # ------------------------------------------------------------------ recorder
+  RecorderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-recorder'
+      CodeUri: src/recorder/
+      Handler: app.lambda_handler
+      Timeout: 15
+      MemorySize: 256
+      Environment:
+        Variables:
+          HISTORY_TTL_DAYS: !Ref HistoryTtlDays
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref AlarmHistoryTable
+      Events:
+        AlarmStateChange:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source: [aws.cloudwatch]
+              detail-type: ['CloudWatch Alarm State Change']
+
+  # ------------------------------------------------------------------ reporter
+  ReporterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-reporter'
+      CodeUri: src/reporter/
+      Handler: app.lambda_handler
+      Timeout: 300
+      MemorySize: 1024
+      Environment:
+        Variables:
+          REPORTS_BUCKET: !Ref ReportsBucket
+          SENDER_EMAIL: !Ref SenderEmail
+          RECIPIENT_EMAILS: !Ref RecipientEmails
+          WINDOW_HOURS: !Ref WindowHours
+          ALARM_NAME_PREFIX: !Ref AlarmNamePrefix
+          ACCOUNT_LABEL: !Sub '${AWS::AccountId} / ${AWS::Region}'
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AlarmHistoryTable
+        - S3WritePolicy:
+            BucketName: !Sub '${ProjectName}-${Environment}-reports-${AWS::AccountId}'
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cloudwatch:DescribeAlarms
+                - cloudwatch:DescribeAlarmHistory
+                - cloudwatch:ListTagsForResource
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: '*'
+              Condition:
+                StringEquals:
+                  'ses:FromAddress': !Ref SenderEmail
+      Events:
+        DailySchedule:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: !Ref ScheduleExpression
+            Description: Daily CloudWatch alarm report
+            Input: !Sub '{"windowHours": ${WindowHours}}'
+
+  ReporterFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-reporter-errors'
+      AlarmDescription: The alarm reporter itself failed — nobody is watching the watchers
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ReporterFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  ReporterFunctionName:
+    Value: !Ref ReporterFunction
+  RecorderFunctionName:
+    Value: !Ref RecorderFunction
+  HistoryTable:
+    Value: !Ref AlarmHistoryTable
+  ReportsBucket:
+    Value: !Ref ReportsBucket
